@@ -1,16 +1,22 @@
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE} from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import {
   requestForegroundPermissionsAsync, // Solicite o acesso a localizacao
-  getCurrentPositionAsync // Recebe a localizacao
+  getCurrentPositionAsync,// Recebe a localizacao
+  watchPositionAsync,
+  LocationAccuracy
 } from 'expo-location';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import MapViewDirections from 'react-native-maps-directions';
 import { mapskey } from './utils/mapsApiKey';
 
 export default function App() {
-
+  const mapsReference = useRef(null);
   const [initialPosition, setInitialPosition] = useState(null);
+  const [finalPosition, setFinalPosition] = useState({
+    latitude: -23.532877,
+    longitude: -46.635338,
+  })
 
   async function LocationCapture() {
     const { granted } = await requestForegroundPermissionsAsync()
@@ -23,16 +29,52 @@ export default function App() {
 
     }
   }
-
+  async function ReloadViewMap() {
+    if (mapsReference.current && initialPosition) {
+      await mapsReference.current.fitToCoordinates(
+        [{ latitude: initialPosition.coords.latitude, longitude: initialPosition.coords.longitude },
+        { latitude: finalPosition.latitude, longitude: finalPosition.longitude }
+        ],
+        {
+          edgePadding: { top: 60, right: 60, bottom: 60, left: 60 },
+          animated: true
+        }
+      )
+    }
+  }
+  
   useEffect(() => {
     LocationCapture()
-  }, [10000])
+
+    watchPositionAsync({
+      accuracy : LocationAccuracy.Highest,
+      timeInterval: 1000,
+      distanceInterval: 1,
+    }, async (response) => {
+      // recebe e guarda a nova localização
+      await setInitialPosition(response)
+
+      mapsReference.current?.animatedCamera({
+        pitch: 60,
+        center: response.coords
+      })
+
+      console.log(response)
+    })
+
+  }, [1000])
+
+  useEffect(() => {
+    ReloadViewMap()
+  }, [initialPosition])
+
 
   return (
     <View style={styles.container}>
       {
         initialPosition != null ? (
           <MapView
+            ref={mapsReference}
             initialRegion={{
               latitude: initialPosition.coords.latitude,
               longitude: initialPosition.coords.longitude,
@@ -99,7 +141,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%'
   },
-  
+
 });
 
 const grayMapStyle = [
